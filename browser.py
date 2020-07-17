@@ -1,49 +1,22 @@
 # Pretend command line text browser using string variables as site contents
+# Update makes get requests top inputted url and print's text of response
 
 import sys
 import os
+import requests
+from bs4 import BeautifulSoup
+import re
+from colorama import init, Fore, Style
+init(autoreset=True) 
 
-nytimes_com = '''
-This New Liquid Is Magnetic, and Mesmerizing
-
-Scientists have created “soft” magnets that can flow 
-and change shape, and that could be a boon to medicine 
-and robotics. (Source: New York Times)
-
-
-Most Wikipedia Profiles Are of Men. This Scientist Is Changing That.
-
-Jessica Wade has added nearly 700 Wikipedia biographies for
- important female and minority scientists in less than two 
- years.
-
-'''
-
-bloomberg_com = '''
-The Space Race: From Apollo 11 to Elon Musk
-
-It's 50 years since the world was gripped by historic images
- of Apollo 11, and Neil Armstrong -- the first man to walk 
- on the moon. It was the height of the Cold War, and the charts
- were filled with David Bowie's Space Oddity, and Creedence's 
- Bad Moon Rising. The world is a very different place than 
- it was 5 decades ago. But how has the space race changed since
- the summer of '69? (Source: Bloomberg)
-
-
-Twitter CEO Jack Dorsey Gives Talk at Apple Headquarters
-
-Twitter and Square Chief Executive Officer Jack Dorsey 
- addressed Apple Inc. employees at the iPhone maker’s headquarters
- Tuesday, a signal of the strong ties between the Silicon Valley giants.
-'''
+# Create directory for saved pages
 directory = sys.argv[1]
 if not os.path.exists(directory):
     os.mkdir(directory)
 
-saved_pages = []
+# Initiate empty history folder
 history = []
-site = ''
+site_file_name = ''
 
 while True:
     command = input()
@@ -53,39 +26,42 @@ while True:
         # Do nothing if history is empty
         if len(history) == 0:
             continue
-        # Pop history stack and display page
+        # Pop history stack and display saved page file from directory
         else:
             with open(f'{directory}/{history.pop()}', 'r') as file:
                 print(file.read())
                 continue
-    # Add previous page to history before navigating away            
-    if site != '':
-        history.append(site)
-    # If not a url
-    if command.find('.') == -1:
-        # If page visited before
-        if command in saved_pages:
-            site = command
-            with open(f'{directory}/{site}', 'r') as file:
-                print(file.read())
-        else:
-            print('Error: Incorrect URL')
-    # If command looks like a url
+    # Add previous page (if there is one) to history before navigating away            
+    if site_file_name != '':
+        history.append(site_file_name)
+
+    # Format command into usable url and site file name
+    if command[:7] != 'http://':
+        url = 'http://' + command
+        site_file_name = command[:command.rfind(".")].replace('/', '_')
     else:
         url = command
-        # Site is everything before last '.'
-        site = url[:url.rfind(".")]
-        if url == 'bloomberg.com':
-            print(bloomberg_com)
-            if site not in saved_pages:
-                with open(f'{directory}/{site}', 'w') as file:
-                    file.writelines(bloomberg_com)
-                saved_pages.append(site)
-        elif url == 'nytimes.com':
-            print(nytimes_com)
-            if site not in saved_pages:
-                with open(f'{directory}/{site}', 'w') as file:
-                    file.writelines(nytimes_com)
-                saved_pages.append(site)
+        site_file_name = url[7:url.rfind(".")].replace('/', '_')
+
+    # If page visited before, just open saved version
+    if os.path.exists(f'{directory}/{site_file_name}'):
+        with open(f'{directory}/{site_file_name}', 'r') as file:
+            print(file.read())
+
+    # Get page from web
+    else:
+        # Make request to URL
+        site_response = requests.get(url)
+        if site_response:
+            soup = BeautifulSoup(site_response.text, 'html.parser')
+            for link in soup.find_all('a'):
+                if link.string:
+                    link.string.replace_with(Fore.BLUE + link.string + Fore.WHITE)
+            text = soup.get_text('\n', strip=True)
+            print(text)
+            with open(f'{directory}/{site_file_name}', 'w') as file:
+                file.writelines(text)
+
         else:
-            print('Error: Incorrect URL')
+            print('Site error')
+            continue
